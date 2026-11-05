@@ -59,9 +59,11 @@ Source: "..\assets\logo.ico"; DestDir: "{app}"; DestName: "pilot.ico"; Flags: ig
 
 [Icons]
 ; Pilot's window, on its start page. pilot app starts its server apart and returns at once, so the
-; console it starts in only shows (minimized) for a moment; closing the window stops Pilot.
-Name: "{userprograms}\Pilot"; Filename: "{app}\pilot.exe"; Parameters: "app"; WorkingDir: "{app}"; IconFilename: "{app}\pilot.ico"; Flags: runminimized
-Name: "{userdesktop}\Pilot"; Filename: "{app}\pilot.exe"; Parameters: "app"; WorkingDir: "{app}"; IconFilename: "{app}\pilot.ico"; Flags: runminimized; Tasks: desktopicon
+; console it starts in only shows (minimized) for a moment; closing the window stops Pilot. The
+; AppUserModelID is the one pilot app gives its window (src/web/brand.js), so the taskbar shows the
+; window with this shortcut's icon, and groups and pins it as Pilot.
+Name: "{userprograms}\Pilot"; Filename: "{app}\pilot.exe"; Parameters: "app"; WorkingDir: "{app}"; IconFilename: "{app}\pilot.ico"; AppUserModelID: "DXSpark.Pilot"; Flags: runminimized
+Name: "{userdesktop}\Pilot"; Filename: "{app}\pilot.exe"; Parameters: "app"; WorkingDir: "{app}"; IconFilename: "{app}\pilot.ico"; AppUserModelID: "DXSpark.Pilot"; Flags: runminimized; Tasks: desktopicon
 
 [Run]
 Filename: "{userprograms}\Pilot.lnk"; Description: "Open Pilot"; Flags: shellexec nowait postinstall skipifsilent

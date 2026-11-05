@@ -30,7 +30,9 @@ function dib(rows) {
 }
 
 function ico(dark) {
-  const sizes = [16, 32, 48, 64, 128, 256];
+  // The taskbar's and title bar's sizes at 100% to 200% scale (16, 20, 24, 30, 32, 40, 48), so Windows
+  // never has to scale one, and the larger ones for Explorer.
+  const sizes = [16, 20, 24, 30, 32, 40, 48, 64, 128, 256];
   const images = sizes.map((s) => (s >= 256 ? logoPng(s, dark) : dib(draw(s, dark))));
   const header = Buffer.alloc(6);
   header.writeUInt16LE(1, 2);

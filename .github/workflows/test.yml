@@ -1,10 +1,11 @@
-# Pilot's tests on Linux and Windows, for pull requests and pushes to main. Paths and line endings
-# must work on both (.gitattributes keeps LF).
+# Pilot's tests on Linux and Windows, for pull requests and pushes to any branch: a branch is checked
+# on Windows (the C# inside the PowerShell helpers compiles only there) before it reaches main, where
+# every push releases. Paths and line endings must work on both (.gitattributes keeps LF).
 name: Tests
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
 
 jobs:

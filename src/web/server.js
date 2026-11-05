@@ -29,6 +29,7 @@ import { mcpServer, writeMcpJson } from '../cli.js';
 import { SKILL } from '../skill.js';
 import { kindOf } from '../walk.js';
 import { findChrome } from '../shots.js';
+import { brandWindows } from './brand.js';
 import { describeFolder, forgetProject, listFolders, pickFolder, pickerKind, pinProject, projectFolder, recentProjects, rememberProject, stateDir } from './projects.js';
 
 /** The page model, made fit to send: the tree as it is, without the index's Maps. */
@@ -604,5 +605,8 @@ export async function launchApp({ argv, root = null, port = null, vendor = false
     openBrowser(ui.url);
   });
   win.unref();
+  // On Windows, Pilot's own icon and taskbar group for the window (an installed Pilot only: the
+  // relaunch command is the executable).
+  if (process.platform === 'win32' && COMPILED) brandWindows({ log: stamp });
   return null;
 }

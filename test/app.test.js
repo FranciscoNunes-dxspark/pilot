@@ -11,6 +11,9 @@ import { fileURLToPath } from 'node:url';
 import { appWindowArgs, createSession, findAppBrowser, handler, lifecycle } from '../src/web/server.js';
 import { describeFolder, forgetProject, listFolders, pickFolder, pickerKind, pinProject, projectFolder, recentProjects, rememberProject } from '../src/web/projects.js';
 import { pageHtml } from '../src/web/page.js';
+import { APP_ID, brandCommand, iconFile } from '../src/web/brand.js';
+import { WINDOWS_PICKER } from '../src/web/projects.js';
+import { spawnSync } from 'node:child_process';
 import { decodePng } from '../src/png.js';
 import { logoPng, logoSvg, shapes } from '../src/logo.js';
 
@@ -265,4 +268,31 @@ test('one logo everywhere: the assets, the window\'s icons and the menu bar are 
   assert.match(html, /<link rel="icon" type="image\/png" sizes="256x256" href="data:image\/png;base64,/);
   assert.match(html, /<link rel="icon" type="image\/svg\+xml" sizes="any" href="data:image\/svg\+xml,/);
   assert.match(html, /"logo":"data:image\/svg\+xml,/);
+});
+
+test('the taskbar: the window gets Pilot\'s ID (the shortcut\'s too), its relaunch command and its icon', () => {
+  const exe = 'C:\\Users\\u\\AppData\\Local\\Programs\\Pilot\\pilot.exe';
+  const beside = 'C:\\Users\\u\\AppData\\Local\\Programs\\Pilot\\pilot.ico';
+  assert.equal(iconFile(exe, (p) => p.replace(/\//g, '\\') === beside).replace(/\//g, '\\'), beside);
+  assert.equal(iconFile(exe, () => false), exe, 'no pilot.ico: the executable\'s own icon');
+  const { cmd, args, env } = brandCommand({ exe, server: 1234, env: {} });
+  assert.equal(cmd, 'powershell');
+  assert.equal(env.PILOT_BRAND_ID, APP_ID);
+  assert.equal(env.PILOT_BRAND_COMMAND, `"${exe}" app`);
+  assert.equal(env.PILOT_BRAND_SERVER, '1234');
+  assert.match(args.at(-1), /SHGetPropertyStoreForWindow/);
+  // The setup's shortcuts carry the same ID, which is how Windows takes the button's icon from them.
+  const iss = readFileSync(fileURLToPath(new URL('../installer/Pilot.iss', import.meta.url)), 'utf8');
+  assert.equal(iss.match(new RegExp(`AppUserModelID: "${APP_ID.replace('.', '\\.')}"`, 'g'))?.length, 2);
+  // pilot.ico has the taskbar's sizes, so Windows never scales one.
+  const ico = readFileSync(fileURLToPath(new URL('../assets/logo.ico', import.meta.url)));
+  const sizes = Array.from({ length: ico.readUInt16LE(4) }, (_, i) => ico[6 + 16 * i] || 256);
+  for (const s of [16, 20, 24, 30, 32, 40, 48, 256]) assert.ok(sizes.includes(s), `${s} px`);
+});
+
+test('the Windows helpers compile: the folder picker and the taskbar icon', { skip: process.platform !== 'win32' && 'PowerShell and C# are checked on Windows' }, () => {
+  for (const [name, script, flag] of [['picker', WINDOWS_PICKER, 'PILOT_PICK_CHECK'], ['taskbar', brandCommand({ env: {} }).args.at(-1), 'PILOT_BRAND_CHECK']]) {
+    const r = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { env: { ...process.env, [flag]: '1' }, encoding: 'utf8', timeout: 120000 });
+    assert.equal(r.status, 0, `${name}: ${r.stderr || r.stdout}`);
+  }
 });

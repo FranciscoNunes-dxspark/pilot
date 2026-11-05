@@ -100,7 +100,7 @@ export function listFolders(path) {
 
 // Windows' Explorer-style folder dialog (IFileOpenDialog with FOS_PICKFOLDERS), from PowerShell,
 // in front of the window that has the focus: Pilot's, as the click came from it.
-const WINDOWS_PICKER = `
+export const WINDOWS_PICKER = `
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System;
@@ -152,6 +152,7 @@ public static class PilotPicker {
   }
 }
 '@
+if ($env:PILOT_PICK_CHECK) { exit 0 }
 $p = [PilotPicker]::Pick($env:PILOT_PICK_TITLE, $env:PILOT_PICK_START)
 if ($p) { [Console]::Out.Write($p) }
 `;

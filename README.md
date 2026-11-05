@@ -368,6 +368,9 @@ in a browser profile of Pilot's own. It opens the way Visual Studio does:
 
   Alt+F, Alt+V, Alt+T, Alt+C and Alt+H open them; the arrow keys and Enter move in them.
 
+On Windows the window is Pilot's on the taskbar, not the browser's: its own icon, its own group,
+and pinning it pins Pilot (`pilot app`), so the pinned button opens the start page.
+
 `pilot app` starts its server apart and returns at once (from a shortcut, its console only shows for
 a moment); the server stops a few seconds after its window closes, and logs to `pilot-app.log` in
 Pilot's cache folder. Each window is a server of its own on the next free port, so two projects can
