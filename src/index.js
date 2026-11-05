@@ -15,7 +15,7 @@ import { parseScript } from './parse/script.js';
 import { parseStyle } from './parse/style.js';
 import { isVendor, walk } from './walk.js';
 
-const CACHE_VERSION = 8;
+const CACHE_VERSION = 9;
 const MAX_PARSE = 1_500_000;
 
 /** Where the parsed files are kept between runs: PILOT_CACHE, else the platform's cache folder. */
@@ -155,7 +155,9 @@ export class ProjectIndex {
         // using them counts as styled. Cheap: no rules, no lines.
         try {
           const text = readFileSync(join(this.root, f.rel), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{[^{}]*\}/g, '{}');
-          data = { libraryClasses: [...new Set([...text.matchAll(/\.(-?[A-Za-z_][\w-]*)/g)].map((m) => m[1]))] };
+          // The shape of any stylesheet's data, empty, so what reads stylesheets (their imports, rules,
+          // urls) finds nothing here rather than nothing at all.
+          data = { ...parseStyle('', 'css'), libraryClasses: [...new Set([...text.matchAll(/\.(-?[A-Za-z_][\w-]*)/g)].map((m) => m[1]))] };
         } catch {
           // Unreadable: it just isn't counted.
         }
@@ -200,15 +202,17 @@ export class ProjectIndex {
     this.problems = [];
     this.projects = [...this.files.values()].filter((f) => f.kind === 'project').map((f) => dirOf(f.rel)).sort((a, b) => b.length - a.length);
     this.wwwroots = new Set(this.projects.filter((p) => [...this.lower.keys()].some((k) => k.startsWith(lowerKey(joinRel(p, 'wwwroot')) + '/'))).map(lowerKey));
-    this.linkCompiled();
-    this.linkControllers();
-    this.linkBundles();
-    this.linkViews();
-    this.linkScripts();
-    this.linkStyles();
-    this.linkImages();
-    this.linkModels();
-    this.buildSymbols();
+    // Each step on its own: one that fails on something it didn't expect leaves the rest of the
+    // project linked, and says so among the problems (and on stderr), rather than nothing opening.
+    for (const step of ['linkCompiled', 'linkControllers', 'linkBundles', 'linkViews', 'linkScripts', 'linkStyles', 'linkImages', 'linkModels', 'buildSymbols']) {
+      try {
+        this[step]();
+      } catch (e) {
+        this.problems.push({ file: '', line: 0, message: `Pilot failed in ${step}: ${e.message}. Please report it, with the file it names if any: github.com/FranciscoNunes-dxspark/pilot/issues` });
+        if (step === 'buildSymbols') this.symbols ??= { classes: new Map(), ids: new Map(), attrs: new Map(), vars: new Map(), mixins: new Map(), defs: new Map(), widgets: [] };
+        process.stderr.write(`Pilot failed in ${step}: ${e.stack ?? e.message}\n`);
+      }
+    }
   }
 
   edge(from, to, kind, line, extra = {}) {
@@ -686,7 +690,7 @@ export class ProjectIndex {
   linkScripts() {
     for (const f of this.files.values()) {
       if (f.kind !== 'script' || !f.data) continue;
-      for (const imp of f.data.imports) {
+      for (const imp of f.data.imports ?? []) {
         const to = this.resolveModule(f.rel, imp.spec);
         if (to) this.edge(f.rel, to, 'import', imp.line, { spec: imp.spec });
         else if (imp.spec.startsWith('.') || imp.kind === 'reference') this.problem(f.rel, imp.line, `import "${imp.spec}" not found`);
@@ -735,7 +739,7 @@ export class ProjectIndex {
   linkStyles() {
     for (const f of this.files.values()) {
       if (f.kind !== 'style' || !f.data) continue;
-      for (const imp of f.data.imports) {
+      for (const imp of f.data.imports ?? []) {
         const to = this.resolveStyleImport(f.rel, imp.spec);
         if (to) this.edge(f.rel, to, 'import', imp.line, { spec: imp.spec, options: imp.options });
         else if (!/^(https?:)?\/\//.test(imp.spec)) this.problem(f.rel, imp.line, `@import "${imp.spec}" not found`);

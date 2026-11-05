@@ -8,7 +8,7 @@ import { inSkippedDir, isWorktree, walk } from '../src/walk.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildIndex, routeSegment } from '../src/index.js';
+import { ProjectIndex, buildIndex, routeSegment } from '../src/index.js';
 
 const ROOT = fileURLToPath(new URL('./fixtures/shop', import.meta.url));
 const idx = buildIndex(ROOT, { cache: false });
@@ -181,5 +181,49 @@ test('worktrees are left out: .claude\'s and any other in the project, but not a
     assert.equal(inSkippedDir('Views/Home/x.cshtml'), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a library stylesheet (read for its class names only) links and answers like any other', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pilot-lib-'));
+  try {
+    const put = (rel, text) => {
+      mkdirSync(join(dir, rel, '..'), { recursive: true });
+      writeFileSync(join(dir, rel), text);
+    };
+    put('Web/Web.csproj', '<Project Sdk="Microsoft.NET.Sdk.Web"></Project>');
+    put('Web/wwwroot/lib/bootstrap/dist/css/bootstrap.css', '@import url("reboot.css");\n.btn { color: red; }\n.btn-primary { color: blue; }\n');
+    put('Web/wwwroot/css/site.css', '@import "../lib/bootstrap/dist/css/bootstrap.css";\n.site { color: black; }\n');
+    put('Web/Views/Shared/_Layout.cshtml', '<link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.css" />\n<link rel="stylesheet" href="~/css/site.css" />\n<button class="btn btn-primary site">x</button>\n@RenderBody()\n');
+    put('Web/Views/Home/Index.cshtml', '<p class="btn">Home</p>\n');
+    // Opening such a project stopped at linking: the library's data had no imports to go through.
+    const idx = buildIndex(dir, { cache: false });
+    const lib = idx.file('Web/wwwroot/lib/bootstrap/dist/css/bootstrap.css');
+    assert.deepEqual(lib.data.imports, []);
+    assert.ok(lib.data.libraryClasses.includes('btn-primary'));
+    assert.equal(idx.symbols.classes.get('btn-primary')?.find((x) => x.role === 'style')?.vendor, true, 'styled by the library');
+    // What reads a stylesheet works on it too.
+    const { file } = await import('../src/queries.js');
+    assert.doesNotThrow(() => file(idx, 'Web/wwwroot/lib/bootstrap/dist/css/bootstrap.css'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a linking step that fails leaves the rest linked, and says so among the problems', () => {
+  const was = ProjectIndex.prototype.linkStyles;
+  const said = process.stderr.write;
+  ProjectIndex.prototype.linkStyles = function () {
+    throw new TypeError('undefined is not an object');
+  };
+  process.stderr.write = () => true;
+  try {
+    const idx = buildIndex(fileURLToPath(new URL('./fixtures/shop', import.meta.url)), { cache: false });
+    assert.ok(idx.problems.some((p) => /Pilot failed in linkStyles: undefined is not an object/.test(p.message)));
+    assert.ok(idx.out('Shop.Web/Views/Orders/Index.cshtml').length > 0, 'views still linked');
+    assert.ok(idx.symbols.classes.size > 0, 'and their symbols built');
+  } finally {
+    ProjectIndex.prototype.linkStyles = was;
+    process.stderr.write = said;
   }
 });
