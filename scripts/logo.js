@@ -1,5 +1,5 @@
 // Draws Pilot's icon into assets/: logo.ico (the Windows executable's icon, on the dark rounded
-// square), logo-transparent.ico and logo.png, from the pixel-art ship's wheel in src/logo.js.
+// square), logo-transparent.ico and logo.png, from the logo's shapes in src/logo.js.
 //   node scripts/logo.js
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { draw, logoPng } from '../src/logo.js';

@@ -12,7 +12,7 @@ import { appWindowArgs, createSession, findAppBrowser, handler, lifecycle } from
 import { describeFolder, forgetProject, listFolders, pickFolder, pickerKind, pinProject, projectFolder, recentProjects, rememberProject } from '../src/web/projects.js';
 import { pageHtml } from '../src/web/page.js';
 import { decodePng } from '../src/png.js';
-import { WHEEL, logoPng, logoSvg } from '../src/logo.js';
+import { logoPng, logoSvg, shapes } from '../src/logo.js';
 
 const SHOP = fileURLToPath(new URL('./fixtures/shop', import.meta.url));
 
@@ -248,9 +248,18 @@ test('one logo everywhere: the assets, the window\'s icons and the menu bar are 
   // assets/logo.png is what scripts/logo.js draws from src/logo.js, so the two can't drift apart.
   assert.deepEqual(logoPng(256), readFileSync(fileURLToPath(new URL('../assets/logo.png', import.meta.url))));
   assert.deepEqual(decodePng(logoPng(32)).width, 32);
-  const cells = WHEEL.join('').replace(/\./g, '').length;
-  assert.equal((logoSvg().match(/<rect /g) ?? []).length, cells);
-  assert.equal((logoSvg({ dark: true }).match(/<rect /g) ?? []).length, cells + 1, 'and the dark square');
+  // The SVG and the pixels are the same shapes: six nodes, five edges, and the dark square behind them.
+  assert.equal((logoSvg().match(/<circle /g) ?? []).length, 6);
+  assert.equal((logoSvg().match(/<line /g) ?? []).length, 5);
+  assert.equal((logoSvg().match(/<rect /g) ?? []).length, 0);
+  assert.equal((logoSvg({ dark: true }).match(/<rect /g) ?? []).length, 1);
+  assert.equal(shapes({ dark: true }).length, shapes({ dark: false }).length + 1);
+  // Every node shows at taskbar size: its centre pixel is its own colour, not the background.
+  const small = decodePng(logoPng(32));
+  for (const s of shapes().filter((x) => x.circle)) {
+    const i = (Math.floor((s.circle[1] / 100) * 32) * 32 + Math.floor((s.circle[0] / 100) * 32)) * 4;
+    assert.notDeepEqual([...small.data.subarray(i, i + 3)], [0x14, 0x20, 0x2c], `the node at ${s.circle[0]}, ${s.circle[1]}`);
+  }
   const html = pageHtml({ version: '1' });
   assert.match(html, /<link rel="icon" type="image\/png" sizes="32x32" href="data:image\/png;base64,/);
   assert.match(html, /<link rel="icon" type="image\/png" sizes="256x256" href="data:image\/png;base64,/);

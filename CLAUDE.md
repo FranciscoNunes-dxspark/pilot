@@ -13,7 +13,7 @@ npm test                                                  # whole suite (node:te
 node --import ./src/app.js --test test/parsers.test.js    # one file
 node bin/pilot.js --root test/fixtures/shop page /Orders  # try it on the fixture
 npm run build                                             # Bun-compiled executable → dist/ (scripts/build.js; --all for every platform)
-node scripts/logo.js                                      # regenerate assets/ (the ship's wheel)
+node scripts/logo.js                                      # regenerate assets/ from src/logo.js (the map of nodes)
 ```
 
 ## Architecture
