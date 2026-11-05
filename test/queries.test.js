@@ -10,7 +10,7 @@ import { file, find, impact, overview, page, problems, resolveTarget, routes, se
 import { mcpRoot, mcpServer, parseArgs, run, writeMcpJson } from '../src/cli.js';
 import { writeFileSync } from 'node:fs';
 import { TOOLS, createServer } from '../src/mcp.js';
-import { mcpHandler } from '@fleet/kit/mcp.js';
+import { mcpHandler } from '../src/kit/mcp.js';
 
 const ROOT = fileURLToPath(new URL('./fixtures/shop', import.meta.url));
 const idx = buildIndex(ROOT, { cache: false });

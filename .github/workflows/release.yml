@@ -1,0 +1,134 @@
+# Every push to main (except Markdown-only ones) releases Pilot as the next version, and "Run workflow"
+# on the Actions tab does it by hand. The version is the newest release's (a tag v…) with the patch
+# raised (v0.2.3 → 0.2.4), or package.json's when that's higher, which is how to move to a new minor or
+# major version. Nothing is committed back: the version is set in the runner and baked into the builds
+# (scripts/build.js), so package.json lags behind the releases.
+#
+# A release has the executables for every platform (Bun 1.4.2), the Windows setup program (Inno Setup),
+# the install scripts as pilot-install.sh and pilot-install.ps1, and SHA256SUMS.txt, which the
+# updater and the install scripts check every download against.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One release at a time, so two quick merges get two versions in order.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+      previous: ${{ steps.next.outputs.previous }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Next version
+        id: next
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --limit 1000 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[].tagName' > tags.txt
+          node -e '
+            const fs = require("fs");
+            const parse = (v) => (/^(\d+)\.(\d+)\.(\d+)$/.exec(v) || []).slice(1).map(Number);
+            const cmp = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+            const tags = fs.readFileSync("tags.txt", "utf8").split("\n").filter((t) => t.startsWith("v")).map((t) => parse(t.slice(1))).filter((v) => v.length === 3).sort(cmp);
+            const latest = tags.at(-1);
+            const pkg = parse(require("./package.json").version);
+            const next = !latest || cmp(pkg, latest) > 0 ? pkg : [latest[0], latest[1], latest[2] + 1];
+            console.log(`Latest release ${latest ? "v" + latest.join(".") : "none"}; releasing v${next.join(".")}.`);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${next.join(".")}\nprevious=${latest ? "v" + latest.join(".") : ""}\n`);
+          '
+
+  test:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  build:
+    needs: [version, test]
+    strategy:
+      matrix:
+        include:
+          # Bun only embeds the Windows icon when it builds on Windows, and Inno Setup runs there.
+          - os: windows-latest
+            targets: bun-windows-x64
+          - os: ubuntu-latest
+            targets: bun-linux-x64 bun-linux-arm64 bun-darwin-x64 bun-darwin-arm64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      # scripts/build.js bakes package.json's version into the executables.
+      - name: Set the version
+        run: |
+          node -e '
+            const fs = require("fs");
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            pkg.version = process.argv[1];
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
+          ' "${{ needs.version.outputs.version }}"
+      - run: bun scripts/build.js ${{ matrix.targets }}
+      - name: The setup program
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          ./installer/build.ps1 -Version ${{ needs.version.outputs.version }}
+      - name: The install scripts
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cp installer/install.sh dist/pilot-install.sh
+          cp installer/install.ps1 dist/pilot-install.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pilot-${{ matrix.os }}
+          path: dist/
+
+  publish:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pilot-*
+          path: out
+          merge-multiple: true
+      - name: Checksums
+        working-directory: out
+        run: sha256sum * > SHA256SUMS.txt
+      # Creates the tag on this commit too, and marks it GitHub's latest release, which the install
+      # scripts download from (releases/latest/download/…).
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+          PREVIOUS: ${{ needs.version.outputs.previous }}
+        run: |
+          gh release create "v$VERSION" out/* --target "$GITHUB_SHA" --title "Pilot v$VERSION" --latest \
+            --generate-notes ${PREVIOUS:+--notes-start-tag "$PREVIOUS"}

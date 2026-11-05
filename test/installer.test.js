@@ -10,7 +10,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assetName, buildTargets } from '@fleet/kit/update.js';
+import { assetName, buildTargets } from '../src/kit/update.js';
 import { autoUpdate } from '../src/web/server.js';
 
 const dir = fileURLToPath(new URL('../installer/', import.meta.url));
@@ -61,24 +61,33 @@ test('install.sh installs the newest release, checked, and refuses a bad checksu
   const file = `pilot-${os}-${arch}`;
   const binary = '#!/bin/sh\necho 9.9.9\n';
   let checksum = createHash('sha256').update(binary).digest('hex');
+  // GitHub's release downloads: the newest under latest/download, a version under download/v<version>.
+  const asked = [];
   const server = createServer((req, res) => {
-    const base = `http://127.0.0.1:${server.address().port}`;
-    const release = (tag) => ({ tag_name: tag, draft: false, prerelease: false, assets: [{ url: `${base}/repos/r/releases/assets/1`, id: 1, name: file }, { url: `${base}/repos/r/releases/assets/2`, id: 2, name: 'SHA256SUMS.txt' }] });
-    if (req.headers.authorization !== 'Bearer t') return res.writeHead(401).end('{}');
-    if (req.url.includes('/releases?')) return res.end(JSON.stringify([{ tag_name: 'splice-v2.0.0', assets: [] }, release('pilot-v9.9.9'), release('pilot-v9.9.8')], null, 2));
-    if (req.url.endsWith('/releases/tags/pilot-v9.9.9')) return res.end(JSON.stringify(release('pilot-v9.9.9'), null, 2));
-    if (req.url.endsWith('/assets/1')) return res.end(binary);
-    if (req.url.endsWith('/assets/2')) return res.end(`${checksum}  ${file}\n${'0'.repeat(64)}  other\n`);
-    res.writeHead(404).end('{}');
+    asked.push(req.url);
+    const m = /^\/releases\/(?:latest\/download|download\/v9\.9\.[89])\/(.+)$/.exec(req.url);
+    if (m?.[1] === file) return res.end(binary);
+    if (m?.[1] === 'SHA256SUMS.txt') return res.end(`${checksum}  ${file}\n${'0'.repeat(64)}  other\n`);
+    res.writeHead(404).end('Not Found');
   });
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
   const home = mkdtempSync(join(tmpdir(), 'pilot-install-'));
-  const env = { ...process.env, HOME: home, PILOT_INSTALL_API: `http://127.0.0.1:${server.address().port}`, PILOT_INSTALL_VIA: 'token', GITHUB_TOKEN: 't', PILOT_INSTALL_DIR: join(home, 'bin') };
+  const env = { ...process.env, HOME: home, PILOT_INSTALL_BASE: `http://127.0.0.1:${server.address().port}`, PILOT_INSTALL_DIR: join(home, 'bin') };
   try {
     const r = await sh([join(dir, 'install.sh')], env);
     assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout, /Downloading pilot-\w+-\w+ from pilot-v9\.9\.9/);
+    assert.match(r.stdout, /Downloading pilot-\w+-\w+ from the newest release/);
     assert.equal(readFileSync(join(home, 'bin', 'pilot'), 'utf8'), binary);
+    assert.deepEqual(asked, [`/releases/latest/download/${file}`, '/releases/latest/download/SHA256SUMS.txt']);
+    // A version asked for.
+    const v = await sh([join(dir, 'install.sh'), '9.9.8'], env);
+    assert.equal(v.status, 0, v.stderr);
+    assert.match(v.stdout, /from v9\.9\.8/);
+    assert.equal(asked.at(-1), '/releases/download/v9.9.8/SHA256SUMS.txt');
+    // A version that isn't there.
+    const none = await sh([join(dir, 'install.sh'), '1.0.0'], env);
+    assert.notEqual(none.status, 0);
+    assert.match(none.stderr, /couldn't download pilot-\w+-\w+ from v1\.0\.0/);
     // A download that doesn't match its checksum is never installed.
     checksum = '1'.repeat(64);
     rmSync(join(home, 'bin', 'pilot'));

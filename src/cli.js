@@ -148,7 +148,7 @@ export async function run(argv, { write = (s) => process.stdout.write(s), error 
     return null;
   }
   if (opts.command === 'update') {
-    const u = await import('@fleet/kit/update.js');
+    const u = await import('./kit/update.js');
     let latest;
     try {
       latest = await u.fetchLatest({ current: VERSION });

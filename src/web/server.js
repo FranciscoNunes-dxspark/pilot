@@ -343,7 +343,7 @@ function openBrowser(url) {
  */
 export async function autoUpdate(log, env = process.env) {
   if (!COMPILED || env.PILOT_NO_UPDATE === '1') return;
-  const u = await import('@fleet/kit/update.js');
+  const u = await import('../kit/update.js');
   await u.removeOldExecutables();
   const store = u.lastCheckStore(join(stateDir(env), 'update.json'));
   const { checked, newer } = await u.checkForUpdate(await store.load());
@@ -485,7 +485,7 @@ export const SESSION_ACTIONS = {
     return projectInfo(session);
   },
   update: async () => {
-    const u = await import('@fleet/kit/update.js');
+    const u = await import('../kit/update.js');
     const latest = await u.fetchLatest({ current: VERSION });
     if (!COMPILED || !latest || !u.isNewer(latest.version, VERSION)) return { text: u.updateAdvice({ latest, current: VERSION, compiled: COMPILED }).join('\n') };
     const done = await u.installUpdate(latest.version);

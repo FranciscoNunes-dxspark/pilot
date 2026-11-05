@@ -1,10 +1,10 @@
-// Pilot's names in what the kit (@fleet/kit) does for it, from src/app.js: the version a build bakes in,
+// Pilot's names in what src/kit does for it, from src/app.js: the version a build bakes in,
 // the release files and tags.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { APP, COMPILED, VERSION } from '../src/app.js';
-import { assetName, buildTargets, tagOf } from '@fleet/kit/update.js';
+import { assetName, buildTargets, tagOf } from '../src/kit/update.js';
 
 test("Pilot's names: version variable, release files and tags", () => {
   assert.equal(APP.name, 'pilot');
@@ -17,5 +17,5 @@ test("Pilot's names: version variable, release files and tags", () => {
   assert.equal(assetName('win32', 'x64'), 'pilot-windows-x64.exe');
   assert.equal(assetName('linux', 'arm64'), 'pilot-linux-arm64');
   assert.deepEqual(Object.values(buildTargets()), ['pilot-windows-x64.exe', 'pilot-linux-x64', 'pilot-linux-arm64', 'pilot-macos-x64', 'pilot-macos-arm64']);
-  assert.equal(tagOf('1.2.3'), 'pilot-v1.2.3');
+  assert.equal(tagOf('1.2.3'), 'v1.2.3');
 });

@@ -53,12 +53,12 @@ Claude Code can use Pilot two ways, and works best with both:
 
 ### 1. Get Pilot
 
-Each release (tags `pilot-v…` in the repository's Releases) has an installer for Windows and
-install scripts for every system. The repository is private: sign in to GitHub in the browser to
-download, and the scripts download through `gh` signed in (`gh auth login`) or a token in
-`GITHUB_TOKEN` that can read it.
+Each [release](https://github.com/FranciscoNunes-dxspark/pilot/releases) has a setup program for
+Windows, install scripts for every system, and the executables themselves.
 
-**Windows: the setup program.** Download `pilot-windows-x64-setup.exe` and run it. No administrator is
+**Windows: the setup program.** Download
+[`pilot-windows-x64-setup.exe`](https://github.com/FranciscoNunes-dxspark/pilot/releases/latest/download/pilot-windows-x64-setup.exe)
+and run it. No administrator is
 needed: it installs for you, into `%LOCALAPPDATA%\Programs\Pilot`, and:
 
 - puts `pilot` on your PATH, so terminals and Claude Code find it (open a new terminal after);
@@ -72,18 +72,24 @@ project open (the same as `pilot init --mcp` there).
 
 Uninstall it from Installed apps, which also takes it off the PATH and the right-click menu.
 
-**macOS and Linux: the install script.** Download `pilot-install.sh` from the release, then:
+**macOS and Linux: the install script.**
 
 ```bash
-sh pilot-install.sh          # the newest release into ~/.local/bin (PILOT_INSTALL_DIR for another)
-sh pilot-install.sh 0.1.2    # a given version
+curl -fsSL https://github.com/FranciscoNunes-dxspark/pilot/releases/latest/download/pilot-install.sh | sh
 ```
+
+That installs the newest release into `~/.local/bin` (`PILOT_INSTALL_DIR` for another folder); with
+the script downloaded, `sh pilot-install.sh 0.2.0` installs a given version.
 
 It picks the build for your machine, checks it against the release's `SHA256SUMS.txt`, clears macOS's
 quarantine mark, and says how to add the folder to your PATH if it isn't on it.
 
 **Windows without the setup program:** `pilot-install.ps1` does the same as the setup, without the
-shortcuts: `powershell -ExecutionPolicy Bypass -File pilot-install.ps1`.
+shortcuts and the right-click menu:
+
+```powershell
+irm https://github.com/FranciscoNunes-dxspark/pilot/releases/latest/download/pilot-install.ps1 | iex
+```
 
 **By hand:** download `pilot-windows-x64.exe`, `pilot-linux-x64`, `pilot-linux-arm64`,
 `pilot-macos-x64` or `pilot-macos-arm64`, rename it to `pilot` (`pilot.exe`), make it executable
@@ -94,9 +100,9 @@ newer release beside itself (it runs from the next start), and `pilot update` (o
 updates**) does it now. Both check
 the download against the release's checksums. `PILOT_NO_UPDATE=1` turns the daily check off.
 
-**Or from a checkout** of this repository (Node 22+): `npm install` at its root, then
-`node apps/pilot/bin/pilot.js` stands for `pilot` everywhere below; or `npm run build` in
-`apps/pilot` makes the executable for your machine in `apps/pilot/dist`.
+**Or from a checkout** of this repository (Node 22+, and no dependencies to install):
+`node bin/pilot.js` stands for `pilot` everywhere below; `npm run build` makes the executable for
+your machine in `dist/` (with Bun, through npx).
 
 Check it: `pilot --version`, then `pilot overview` in your project's folder (the one with the
 `.sln`, or a web project's folder). The first run reads every file; later runs use the cache.
@@ -126,7 +132,7 @@ claude mcp add pilot --scope project -- pilot mcp    # the same as init --mcp: .
 
 On Windows, give the full path when it isn't on the PATH:
 `claude mcp add pilot -- C:\Users\you\bin\pilot.exe mcp`, or from a checkout
-`claude mcp add pilot -- node C:\src\fleet\apps\pilot\bin\pilot.js mcp`. Without `--root`, the
+`claude mcp add pilot -- node C:\src\pilot\bin\pilot.js mcp`. Without `--root`, the
 server reads the project Claude Code is working in (it says which in `CLAUDE_PROJECT_DIR`), else the
 folder it was started in; add `--root <folder>` after `mcp` to fix one, and
 `--ignore <a,b>` to leave folders out (generated code, a copy of another site).

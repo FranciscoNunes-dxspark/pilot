@@ -2,7 +2,7 @@
 // while it works on its UI. The index is built once and kept; before each call, files whose size or
 // time changed are read again (at most every two seconds), so edits Claude just made are seen.
 import { resolve } from 'node:path';
-import { ToolError, mcpHandler, quietConsole, serveMcp } from '@fleet/kit/mcp.js';
+import { ToolError, mcpHandler, quietConsole, serveMcp } from './kit/mcp.js';
 import { VERSION } from './app.js';
 import { buildIndex } from './index.js';
 import { file, find, impact, overview, page, problems, routes, selector, styleSymbol } from './queries.js';

@@ -1,16 +1,14 @@
 #!/bin/sh
-# Installs Pilot on macOS or Linux: the newest release for this machine, checked against the
-# release's SHA256SUMS.txt, into ~/.local/bin (PILOT_INSTALL_DIR to choose another folder). The
-# repository is private, so it downloads through gh signed in (gh auth login), or with a token in
-# GITHUB_TOKEN (or GH_TOKEN) that can read it. Run it again to update, or use `pilot update`.
-#   sh pilot-install.sh            the newest release
-#   sh pilot-install.sh 0.1.2      that version
+# Installs Pilot on macOS or Linux: the newest release for this machine (or the version given),
+# checked against the release's SHA256SUMS.txt, into ~/.local/bin (PILOT_INSTALL_DIR to choose
+# another folder). Run it again to update, or use `pilot update`.
+#   curl -fsSL https://github.com/FranciscoNunes-dxspark/pilot/releases/latest/download/pilot-install.sh | sh
+#   sh pilot-install.sh 0.2.0      that version
 set -eu
 
-REPO="FranciscoNunes-dxspark/fleet"
+# PILOT_INSTALL_BASE: where the releases are (a test's stand-in for GitHub).
+BASE="${PILOT_INSTALL_BASE:-https://github.com/FranciscoNunes-dxspark/pilot}"
 DIR="${PILOT_INSTALL_DIR:-$HOME/.local/bin}"
-# PILOT_INSTALL_API: another GitHub API (GitHub Enterprise, or a test).
-API="${PILOT_INSTALL_API:-https://api.github.com}/repos/$REPO"
 
 say() { printf '%s\n' "$*"; }
 fail() { printf 'pilot-install: %s\n' "$*" >&2; exit 1; }
@@ -27,52 +25,29 @@ case "$(uname -m)" in
 esac
 FILE="pilot-$os-$arch"
 
+# The newest release, or the version asked for.
+if [ "${1:-}" != "" ]; then
+  from="$BASE/releases/download/v${1#v}"
+  which="v${1#v}"
+else
+  from="$BASE/releases/latest/download"
+  which="the newest release"
+fi
+
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT INT TERM
 
-# gh when it's signed in, else a token (PILOT_INSTALL_VIA=gh or =token picks one).
-token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
-use_gh=0
-if [ "${PILOT_INSTALL_VIA:-}" = gh ] || { [ "${PILOT_INSTALL_VIA:-}" != token ] && command -v gh >/dev/null 2>&1 && gh auth token >/dev/null 2>&1; }; then use_gh=1; fi
-if [ "$use_gh" = 0 ] && [ -z "$token" ]; then
-  fail "the repository is private: sign in with gh (gh auth login) or set GITHUB_TOKEN to a token that can read $REPO"
-fi
-
-# GitHub's REST API, signed in either way.
-api() {
-  if [ "$use_gh" = 1 ]; then
-    gh api "repos/$REPO/${1#"$API/"}"
-  else
-    curl -fsSL -H "Authorization: Bearer $token" -H "Accept: application/vnd.github+json" "$1"
-  fi
-}
-
-# The release: the version asked for, else the newest pilot-v… (the API lists newest first).
-if [ "${1:-}" != "" ]; then
-  tag="pilot-v${1#v}"
-else
-  tag="$(api "$API/releases?per_page=100" | tr ',{}' '\n\n\n' | sed -n 's/^ *"tag_name": *"\(pilot-v[0-9][0-9.]*\)".*/\1/p' | head -n 1)"
-  [ -n "$tag" ] || fail "no Pilot release found in $REPO"
-fi
-release="$(api "$API/releases/tags/$tag")" || fail "no release $tag"
-
-# Each asset's API URL, then its name: download by the URL whose name matches.
-asset_url() {
-  printf '%s' "$release" | tr ',{}' '\n\n\n' | awk -v want="$1" '
-    /"url": *"https?:\/\/[^"]*\/releases\/assets\/[0-9]+"/ { match($0, /https?:[^"]*/); url = substr($0, RSTART, RLENGTH) }
-    /"name": *"/ { match($0, /"name": *"[^"]*"/); n = substr($0, RSTART, RLENGTH); sub(/"name": *"/, "", n); sub(/"$/, "", n); if (n == want && url != "") { print url; exit } }'
-}
 download() {
-  url="$(asset_url "$1")"
-  [ -n "$url" ] || fail "$tag has no $1"
-  if [ "$use_gh" = 1 ]; then
-    gh api -H "Accept: application/octet-stream" "repos/$REPO/releases/assets/${url##*/}" > "$work/$1"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL -o "$work/$1" "$from/$1" || fail "couldn't download $1 from $which"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -O "$work/$1" "$from/$1" || fail "couldn't download $1 from $which"
   else
-    curl -fsSL -H "Authorization: Bearer $token" -H "Accept: application/octet-stream" -o "$work/$1" "$url"
+    fail "curl or wget is needed"
   fi
 }
 
-say "Downloading $FILE from $tag…"
+say "Downloading $FILE from $which…"
 download "$FILE"
 download SHA256SUMS.txt
 
@@ -88,7 +63,7 @@ mv -f "$work/$FILE" "$DIR/pilot"
 # macOS keeps a downloaded program from starting until the quarantine mark is gone.
 if [ "$os" = macos ]; then xattr -d com.apple.quarantine "$DIR/pilot" 2>/dev/null || true; fi
 
-say "Installed $("$DIR/pilot" --version 2>/dev/null || echo "${tag#pilot-v}") in $DIR/pilot."
+say "Installed $("$DIR/pilot" --version 2>/dev/null || echo "$which") in $DIR/pilot."
 case ":$PATH:" in
   *":$DIR:"*) ;;
   *)
@@ -102,7 +77,7 @@ case ":$PATH:" in
     ;;
 esac
 say ""
-say "Next, in a project's folder:"
+say "Next:"
 say "  pilot app                 Pilot's window: recent projects, Open a folder"
-say "  pilot ui                  the UI in your browser"
-say "  pilot init --mcp          connect Claude Code (the skill and the MCP server)"
+say "  pilot ui                  the UI in your browser, for the project in this folder"
+say "  pilot init --mcp          connect Claude Code to the project in this folder"
