@@ -100,6 +100,10 @@ table.sticky th { position: sticky; top: var(--top, 53px); z-index: 1; }
 tr.click:hover td { background: var(--panel2); cursor: pointer; }
 .bar { height: 8px; background: var(--panel2); border-radius: 99px; overflow: hidden; min-width: 60px; }
 .bar i { display: block; height: 100%; border-radius: 99px; }
+.bar i { transition: width .2s; }
+/* A step with no count: stripes that move. */
+.bar i.busy { background-image: linear-gradient(-45deg, rgba(255,255,255,.28) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.28) 50%, rgba(255,255,255,.28) 75%, transparent 75%) !important; background-size: 22px 22px; animation: busy 0.8s linear infinite; }
+@keyframes busy { to { background-position: 22px 0; } }
 .score { display: inline-flex; align-items: center; gap: 8px; min-width: 120px; }
 .score b { width: 26px; text-align: right; }
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }

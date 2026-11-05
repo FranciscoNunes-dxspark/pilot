@@ -102,9 +102,18 @@ export class ProjectIndex {
   }
 
   /** Walks and parses, reusing the cache for files that haven't changed. Returns this. */
-  build({ cache = true, ignore = [], progress = () => {} } = {}) {
+  /**
+   * Reads the project: every file listed, parsed unless the cache has it as it is, then linked.
+   * `progress(text, { phase, done, total })` hears how far it is: 'list', then 'parse' with files
+   * done out of total, then 'link'. `link: false` stops after the parse (and the cache's write):
+   * `pilot index` does the parsing in a process of its own for the UI, which then links from the cache.
+   */
+  build({ cache = true, ignore = [], progress = () => {}, link = true } = {}) {
     const started = Date.now();
+    progress('listing files', { phase: 'list', done: 0, total: 0 });
     const listed = walk(this.root, { ignore });
+    progress(`0/${listed.length} files`, { phase: 'parse', done: 0, total: listed.length });
+    let told = Date.now();
     const cachePath = cacheFile(this.root);
     let old = {};
     if (cache && this.files.size === 0) {
@@ -151,8 +160,13 @@ export class ProjectIndex {
       }
       files.set(f.rel, { rel: f.rel, kind: f.kind, size: f.size, mtime: f.mtime, vendor, lines, data, ...(error ? { error } : {}), ...(f.size > MAX_PARSE ? { skipped: 'too large' } : {}) });
       parsed++;
-      if (parsed % 500 === 0) progress(`${n + 1}/${listed.length} files`);
+      // A few times a second at most, however many files.
+      if (parsed % 25 === 0 && Date.now() - told > 200) {
+        told = Date.now();
+        progress(`${n + 1}/${listed.length} files`, { phase: 'parse', done: n + 1, total: listed.length });
+      }
     });
+    progress(`${listed.length}/${listed.length} files`, { phase: 'parse', done: listed.length, total: listed.length });
     this.files = files;
     this.stats = { parsed, cached, files: files.size, ms: Date.now() - started };
     if (cache && parsed) {
@@ -163,6 +177,8 @@ export class ProjectIndex {
         // A cache that can't be written only costs the next run time.
       }
     }
+    if (!link) return this;
+    progress('linking', { phase: 'link', done: listed.length, total: listed.length });
     this.link();
     this.builtAt = Date.now();
     this.stats.ms = Date.now() - started;
@@ -177,6 +193,7 @@ export class ProjectIndex {
     this.edges = new Map();
     this.reverse = new Map();
     this._attrRoutes = null;
+    this._viewsNamed = null;
     this.nodes = new Map();
     this.problems = [];
     this.projects = [...this.files.values()].filter((f) => f.kind === 'project').map((f) => dirOf(f.rel)).sort((a, b) => b.length - a.length);
@@ -443,9 +460,27 @@ export class ProjectIndex {
     // Not where MVC looks by default (custom view locations, feature folders): any view of that name.
     const base = lowerKey(posix.basename(withExt(name)));
     const tail = template ? lowerKey(`${template}/${posix.basename(withExt(name))}`) : null;
-    const guesses = [...this.files.values()].filter((f) => f.kind === 'view' && lowerKey(posix.basename(f.rel)) === base && (!tail || lowerKey(f.rel).endsWith(tail)) && (!project || this.projectOf(f.rel) === project)).map((f) => f.rel);
+    const guesses = (this.viewsNamed().get(base) ?? []).filter((rel) => (!tail || lowerKey(rel).endsWith(tail)) && (!project || this.projectOf(rel) === project));
     const narrowed = controller ? guesses.filter((g) => lowerKey(g).includes(`/${lowerKey(controller)}/`)) : [];
     return { files: narrowed.length ? narrowed : guesses.length <= 3 ? guesses : [], how: guesses.length ? 'guess' : 'none', ...(guesses.length > 3 && !narrowed.length ? { ambiguous: guesses.length } : {}) };
+  }
+
+  /**
+   * The views by file name (lower case), in the files' order: made once per link, as a guess at a
+   * view outside MVC's places otherwise reads every file, for each reference (minutes on a large
+   * project with feature folders).
+   */
+  viewsNamed() {
+    if (!this._viewsNamed) {
+      this._viewsNamed = new Map();
+      for (const f of this.files.values()) {
+        if (f.kind !== 'view') continue;
+        const k = lowerKey(posix.basename(f.rel));
+        if (!this._viewsNamed.has(k)) this._viewsNamed.set(k, []);
+        this._viewsNamed.get(k).push(f.rel);
+      }
+    }
+    return this._viewsNamed;
   }
 
   /** The controller and area a view in Views/<Controller>/ or Areas/<Area>/Views/<Controller>/ belongs to. */

@@ -138,6 +138,20 @@ export async function run(argv, { write = (s) => process.stdout.write(s), error 
     serve({ root: mcpRoot(opts) });
     return null;
   }
+  if (opts.command === 'index') {
+    // For the UI (not in the help): reads and parses the project into Pilot's cache in a process of
+    // its own, telling how far it is as a JSON line on stdout at each step; the UI links from the cache.
+    const { buildIndex } = await import('./index.js');
+    const say = (p) => write(`${JSON.stringify(p)}\n`);
+    try {
+      const idx = buildIndex(opts.root, { vendor: opts.vendor, ignore: opts.ignore, link: false, progress: (_, p) => say(p) });
+      say({ phase: 'parsed', ...idx.stats });
+      return 0;
+    } catch (e) {
+      error(`${e.message}\n`);
+      return 2;
+    }
+  }
   if (opts.command === 'app') {
     const { launchApp } = await import('./web/server.js');
     return launchApp({ argv, root: opts.rootGiven ? opts.root : null, port: opts.port, vendor: opts.vendor, ignore: opts.ignore, log: (s) => error(`${s}\n`) });
@@ -284,7 +298,7 @@ export async function run(argv, { write = (s) => process.stdout.write(s), error 
   }
   try {
     const { buildIndex } = await import('./index.js');
-    const idx = buildIndex(opts.root, { cache: opts.cache, vendor: opts.vendor, ignore: opts.ignore, progress: (m) => error(`\rReading ${m}`) });
+    const idx = buildIndex(opts.root, { cache: opts.cache, vendor: opts.vendor, ignore: opts.ignore, progress: (m, p) => p?.phase === 'parse' && p.total >= 500 && p.done < p.total && error(`\rReading ${m}`) });
     const result = await command(idx);
     write(opts.json ? `${JSON.stringify(result.data, null, 2)}\n` : `${result.text}\n`);
     return result.data?.error ? 1 : 0;

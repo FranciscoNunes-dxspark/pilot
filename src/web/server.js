@@ -7,6 +7,8 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, readFileSync, watch, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join, resolve } from 'node:path';
+import { createInterface } from 'node:readline';
+import { fileURLToPath } from 'node:url';
 import { COMPILED, VERSION } from '../app.js';
 import { homedir } from 'node:os';
 import { buildIndex } from '../index.js';
@@ -368,9 +370,11 @@ function fixedSession({ index, refresh, root, events }) {
  * again before a request when it's older than `fresh` ms), its files watched (a burst of changes read
  * at once and announced on `events`), and the recent list kept as it's opened.
  */
-export function createSession({ root = null, vendor = false, ignore = [], fresh = 2000, log = () => {}, env = process.env, watchFiles = true, app = false, picker = pickerKind() } = {}) {
+export function createSession({ root = null, vendor = false, ignore = [], fresh = 2000, log = () => {}, env = process.env, watchFiles = true, app = false, picker = pickerKind(), background = true, self = selfCommand() } = {}) {
   let idx = null;
   let watcher = null;
+  // The project being opened in the background, and how far it is: { path, name, phase, done, total }.
+  let opening = null;
   const events = new Set();
   const announce = (what) => {
     for (const l of events) l(what);
@@ -435,6 +439,77 @@ export function createSession({ root = null, vendor = false, ignore = [], fresh 
       announce({ project: dir });
       return idx;
     },
+    /**
+     * Opens a project without holding the server up: `pilot index` reads and parses it into the cache
+     * in a process of its own, telling how far it is, which goes to the window as { opening } events;
+     * then the project opens from the cache here (quick), and { project } follows, or { openError }.
+     * Where there's no other process to start, it opens here as open() does.
+     */
+    openInBackground(path) {
+      const dir = projectFolder(path);
+      if (!dir) throw new Error(`There's no folder ${path}.`);
+      if (opening) throw new Error(`Pilot is opening ${opening.name} already.`);
+      if (!background || !self) return session.open(dir);
+      opening = { path: dir, name: describeFolder(dir).name, phase: 'list', done: 0, total: 0, started: Date.now() };
+      log(`Indexing ${dir}…`);
+      announce({ opening });
+      let told = 0;
+      let errors = '';
+      const finish = (error) => {
+        if (error) {
+          log(`Couldn't open ${dir}: ${error}`);
+          opening = null;
+          announce({ openError: error, path: dir });
+          return;
+        }
+        opening = { ...opening, phase: 'link' };
+        announce({ opening });
+        // Let the window hear it before the last step, which holds the server for a moment.
+        setTimeout(() => {
+          try {
+            opening = null;
+            session.open(dir);
+          } catch (e) {
+            finish(e.message);
+          }
+        }, 50);
+      };
+      let child;
+      try {
+        child = spawn(self.cmd, [...self.args, 'index', '--root', dir, ...(vendor ? ['--vendor'] : []), ...(ignore.length ? ['--ignore', ignore.join(',')] : [])], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...env, PILOT_NO_UPDATE: '1' } });
+      } catch {
+        opening = null;
+        return session.open(dir);
+      }
+      createInterface({ input: child.stdout }).on('line', (line) => {
+        let p;
+        try {
+          p = JSON.parse(line);
+        } catch {
+          return;
+        }
+        if (!['list', 'parse'].includes(p.phase)) return;
+        const changed = p.phase !== opening?.phase;
+        opening = { ...opening, phase: p.phase, done: p.done, total: p.total };
+        if (changed || Date.now() - told > 150) {
+          told = Date.now();
+          announce({ opening });
+        }
+      });
+      child.stderr.on('data', (d) => (errors += d));
+      child.on('error', () => {
+        // Couldn't start it after all: open here, holding the server up as before.
+        opening = null;
+        try {
+          session.open(dir);
+        } catch (e) {
+          announce({ openError: e.message, path: dir });
+        }
+      });
+      child.on('close', (code) => code !== null && finish(code === 0 ? null : errors.trim().split('\n').pop() || `pilot index stopped (${code})`));
+      return null;
+    },
+    opening: () => opening,
     close() {
       watcher?.close();
       watcher = null;
@@ -443,6 +518,11 @@ export function createSession({ root = null, vendor = false, ignore = [], fresh 
   };
   if (root) session.open(root);
   return session;
+}
+
+/** How to start this Pilot again: the executable, or Node with bin/pilot.js from a checkout. */
+export function selfCommand() {
+  return COMPILED ? { cmd: process.execPath, args: [] } : { cmd: process.execPath, args: [fileURLToPath(new URL('../../bin/pilot.js', import.meta.url))] };
 }
 
 /** What the start window and the title bar show: the project open (if any), the recent ones, and Pilot itself. */
@@ -458,14 +538,16 @@ export function projectInfo(session) {
     picker: !!session.picker,
     fixed: !!session.fixed,
     stats: root ? session.index().stats : null,
+    opening: session.opening?.() ?? null,
   };
 }
 
 /** The actions on the session itself (opening, closing, the recent list), which need no project open. */
 export const SESSION_ACTIONS = {
   open: async (session, b) => {
-    const idx = session.open(String(b.path ?? ''));
-    return { ...projectInfo(session), stats: idx.stats };
+    // In the background where the session can (the window hears { opening } as it goes), else at once.
+    const idx = session.openInBackground ? session.openInBackground(String(b.path ?? '')) : session.open(String(b.path ?? ''));
+    return idx ? { ...projectInfo(session), stats: idx.stats } : projectInfo(session);
   },
   close: async (session) => {
     if (session.fixed) throw new Error('This UI shows one project.');
@@ -501,7 +583,8 @@ export const SESSION_ACTIONS = {
 
 /** Starts the UI: opens the project (or none: the start window), listens on 127.0.0.1 (from `port`, or 4170 and up), opens the browser. */
 export async function startUi({ root, port = null, open = true, vendor = false, ignore = [], log = console.error, fresh = 2000, update = true, app = false, env = process.env } = {}) {
-  const session = createSession({ root: root ? resolve(root) : null, vendor, ignore, fresh, log, env, app });
+  // The server first, then the project, in the background: the window shows how far it is.
+  const session = createSession({ vendor, ignore, fresh, log, env, app });
   let bound = null;
   const server = createServer(handler({ session, port: () => bound }));
   const listen = (p) =>
@@ -523,6 +606,14 @@ export async function startUi({ root, port = null, open = true, vendor = false, 
   }
   const url = `http://127.0.0.1:${bound}/`;
   log(app ? `Pilot's window shows ${url}` : `Pilot is at ${url}  (ctrl+c to stop)`);
+  if (root) {
+    try {
+      session.openInBackground(resolve(root));
+    } catch (e) {
+      // A folder that isn't there: the window opens on the start page, saying so.
+      log(`Couldn't open ${root}: ${e.message}`);
+    }
+  }
   if (update) autoUpdate(log, env).catch(() => {});
   if (open) openBrowser(url);
   return { server, url, port: bound, session };

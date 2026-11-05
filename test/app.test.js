@@ -136,7 +136,7 @@ test('the system folder picker: which there is, its answer, a cancel, and none',
 test('a session: no project, then one opened, switched and closed through the API', async () => {
   const t = tempEnv();
   try {
-    const session = createSession({ env: t.env, watchFiles: false, app: true, picker: null });
+    const session = createSession({ env: t.env, watchFiles: false, app: true, picker: null, background: false });
     const serve = handler({ session, port: () => 4170 });
     let r = await call(serve, '/api/project');
     assert.equal(r.json.root, null);
@@ -294,5 +294,33 @@ test('the Windows helpers compile: the folder picker and the taskbar icon', { sk
   for (const [name, script, flag] of [['picker', WINDOWS_PICKER, 'PILOT_PICK_CHECK'], ['taskbar', brandCommand({ env: {} }).args.at(-1), 'PILOT_BRAND_CHECK']]) {
     const r = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { env: { ...process.env, [flag]: '1' }, encoding: 'utf8', timeout: 120000 });
     assert.equal(r.status, 0, `${name}: ${r.stderr || r.stdout}`);
+  }
+});
+
+test('opening in the background: pilot index reads the project apart, the window hears how far, then it opens', async () => {
+  const t = tempEnv();
+  try {
+    const session = createSession({ env: { ...process.env, PILOT_CACHE: t.env.PILOT_CACHE }, watchFiles: false, app: true, picker: null });
+    const heard = [];
+    const done = new Promise((ok) => session.events.add((e) => (heard.push(e), (e.project || e.openError) && ok(e))));
+    assert.equal(session.openInBackground(SHOP), null, 'it returns at once');
+    assert.equal(session.opening().path, SHOP);
+    assert.throws(() => session.openInBackground(SHOP), /opening shop already/);
+    const serve = handler({ session, port: () => 4170 });
+    const r = await call(serve, '/api/project');
+    assert.equal(r.json.opening.name, 'shop', 'a window loading now sees it too');
+    assert.equal(r.json.root, null);
+    const end = await done;
+    assert.equal(end.project, SHOP);
+    assert.equal(session.root(), SHOP);
+    assert.equal(session.opening(), null);
+    const phases = heard.filter((e) => e.opening).map((e) => e.opening.phase);
+    assert.ok(phases.includes('parse') && phases.at(-1) === 'link', phases.join(' '));
+    const parse = heard.find((e) => e.opening?.phase === 'parse' && e.opening.total);
+    assert.ok(parse.opening.total > 10);
+    // A folder that isn't there says so at once.
+    assert.throws(() => session.openInBackground(join(SHOP, 'nope')), /no folder/);
+  } finally {
+    t.done();
   }
 });

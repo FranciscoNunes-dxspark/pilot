@@ -201,8 +201,21 @@ export function client(BOOT) {
   $app.append(banner);
   try {
     const es = new EventSource('/api/events');
+    es.onopen = async () => {
+      const p = await api('/api/project').catch(() => null);
+      if (!p) return;
+      if (p.opening) showOpening(p.opening);
+      else if (openingBox && p.root && p.root !== PROJECT.root) opened();
+    };
     es.onmessage = (ev) => {
       const d = JSON.parse(ev.data);
+      // A project opening in the background: how far it is, then open (or why not).
+      if (d.opening) return showOpening(d.opening);
+      if (d.project) return opened();
+      if (d.openError) {
+        closeOpening();
+        return note(`Couldn't open ${d.path}: ${d.openError}`, { stay: true, warn: true });
+      }
       if (!d.files || !PROJECT.root) return;
       const name = location.hash.split('/')[1] ?? 'overview';
       // Views that only show data follow the files at once; the graph and the forms ask first.
@@ -293,16 +306,50 @@ export function client(BOOT) {
     Object.assign(PROJECT, await api('/api/project'));
     return PROJECT;
   }
-  /** Opens a project in this window: Pilot reads it (from its cache when it has read it before). */
+  /**
+   * Opens a project in this window. Pilot reads it in the background (from its cache, for what it has
+   * read before) and says how far it is, which showOpening shows; then the window reloads on it.
+   */
   async function openProject(path) {
     if (!path) return;
-    const wait = dialog('Opening', h('div', { class: 'flow' }, h('span', { class: 'spinner' }), h('span', {}, `Reading ${path}…`), h('div', { class: 'faint', style: { width: '100%' } }, 'The first time takes longest: then Pilot reads only what changed.')));
     const r = await act('open', { path });
-    wait.close();
     if (r.error) return note(`Couldn't open ${path}: ${r.error}`, { stay: true, warn: true });
-    Object.assign(PROJECT, r);
+    if (r.opening) return showOpening(r.opening);
+    opened();
+  }
+  function opened() {
+    closeOpening();
     location.hash = '#/overview';
     location.reload();
+  }
+  // The box that shows a project opening: files read out of all of them, then the last step. Closed,
+  // it goes on as a note at the bottom of the window.
+  let openingBox = null;
+  let openingHidden = false;
+  function showOpening(o) {
+    const n = (v) => Number(v ?? 0).toLocaleString();
+    const pct = o.total ? Math.floor((o.done / o.total) * 100) : 0;
+    const secs = o.started ? Math.max(0, Math.round((Date.now() - o.started) / 1000)) : 0;
+    const what = o.phase === 'list' ? 'Finding the files…' : o.phase === 'parse' ? `Reading files: ${n(o.done)} of ${n(o.total)} (${pct}%)` : 'Connecting the views, scripts and styles…';
+    if (openingHidden) return note(`Opening ${o.name}: ${what}`, { stay: true });
+    const body = h('div', {},
+      h('div', { class: 'flow' }, h('span', { class: 'spinner' }), h('b', {}, what)),
+      h('div', { class: 'bar', style: { margin: '12px 0 8px', height: '10px' } },
+        h('i', { class: o.phase === 'parse' ? '' : 'busy', style: { width: o.phase === 'parse' ? `${pct}%` : '100%', background: 'var(--accent)' } })),
+      h('div', { class: 'faint mono', style: { overflowWrap: 'anywhere' } }, o.path),
+      h('div', { class: 'faint', style: { marginTop: '8px' } }, `${secs < 2 ? '' : `${secs < 60 ? `${secs} s` : `${Math.floor(secs / 60)} min ${secs % 60} s`} so far. `}The first time Pilot reads every file; after that, only the ones that changed.`));
+    if (openingBox && layer.contains(openingBox.box)) return put(openingBox.box.querySelector('.dialog-body'), body);
+    openingBox = dialog(`Opening ${o.name}`, body);
+    openingBox.closed.then((how) => {
+      // Closed by the reader (not by opening): show the rest as a note.
+      if (how !== 'done') openingHidden = true;
+    });
+  }
+  function closeOpening() {
+    if (openingBox && layer.contains(openingBox.box)) openingBox.close('done');
+    openingBox = null;
+    openingHidden = false;
+    if (/^Opening /.test(banner.textContent)) banner.hidden = true;
   }
   /** File, Open folder: the system's folder picker, or Pilot's own folder browser where there's none. */
   async function openFolder() {
@@ -1455,5 +1502,7 @@ export function client(BOOT) {
   loadProject().catch(() => null).finally(() => {
     if (!PROJECT.root && !/^#\/start/.test(location.hash)) history.replaceState(null, '', '#/start');
     route();
+    // A project opening as the window comes up (pilot app --root, Open in Pilot): its progress.
+    if (PROJECT.opening) showOpening(PROJECT.opening);
   });
 }

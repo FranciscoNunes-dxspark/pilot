@@ -368,6 +368,12 @@ in a browser profile of Pilot's own. It opens the way Visual Studio does:
 
   Alt+F, Alt+V, Alt+T, Alt+C and Alt+H open them; the arrow keys and Enter move in them.
 
+**Opening a project** shows how far Pilot is: the files read out of all of them, with a bar, then a
+last step that connects the views, scripts and styles. The first time, Pilot reads every file; after
+that it keeps them in its cache and reads only the ones that changed, so the same project opens in
+seconds. The reading runs apart from the window, which stays usable meanwhile; closing the box leaves
+the progress as a note at the bottom.
+
 On Windows the window is Pilot's on the taskbar, not the browser's: its own icon, its own group,
 and pinning it pins Pilot (`pilot app`), so the pinned button opens the start page.
 
