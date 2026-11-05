@@ -1,8 +1,10 @@
 // The project's files Pilot reads, found by walking the folder: views, C#, scripts, styles and the
 // build configs that say what compiles to what. Build output, packages and tools' folders are left
 // out; libraries (wwwroot/lib, *.min.js, jquery-*.js) are kept so references to them resolve, but
-// marked `vendor` and not read for selectors unless asked.
-import { readdirSync, statSync } from 'node:fs';
+// marked `vendor` and not read for selectors unless asked. Folders starting with a dot (.git, .vs,
+// .claude with Claude Code's worktrees) and git worktrees anywhere in the project (another checkout,
+// usually of this same project, which would count every file twice) are left out too.
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const SKIP_DIRS = new Set(['node_modules', 'bin', 'obj', 'packages', 'TestResults', '.git', '.vs', '.vscode', '.idea', '.pilot', 'bower_components', 'jspm_packages', '.angular', '.nuget', 'artifacts', 'publish', 'App_Data']);
@@ -45,6 +47,25 @@ export function kindOf(name) {
   return KINDS[ext] ?? null;
 }
 
+/** Whether a folder name is one Pilot never goes into: SKIP_DIRS, and any starting with a dot but .well-known. */
+export const skippedDir = (name) => SKIP_DIRS.has(name) || (name.startsWith('.') && name !== '.well-known');
+
+/** Whether a `/`-separated path relative to the root lies in a folder Pilot never goes into. */
+export const inSkippedDir = (rel) => String(rel).split('/').slice(0, -1).some(skippedDir);
+
+/**
+ * Whether `dir` is a git worktree: its .git is a file pointing into a repository's worktrees folder
+ * (`gitdir: …/.git/worktrees/<name>`). A submodule's .git is a file too, but points into .git/modules,
+ * and its code is part of the project, so it's read.
+ */
+export function isWorktree(dir) {
+  try {
+    return /^gitdir:.*[\\/]worktrees[\\/][^\\/]+\s*$/m.test(readFileSync(join(dir, '.git'), 'utf8'));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Every file under `root` Pilot reads: [{ rel, kind, size, mtime }], `rel` `/`-separated. `ignore` is a
  * list of folder names or path prefixes to leave out besides SKIP_DIRS.
@@ -60,11 +81,13 @@ export function walk(root, { ignore = [], maxFiles = 200000 } = {}) {
     } catch {
       return;
     }
+    // A worktree inside the project: another checkout, not more of this one.
+    if (rel && entries.some((e) => e.name === '.git' && e.isFile()) && isWorktree(dir)) return;
     for (const e of entries) {
       if (out.length >= maxFiles) return;
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) {
-        if (SKIP_DIRS.has(e.name) || names.has(e.name) || (e.name.startsWith('.') && e.name !== '.well-known')) continue;
+        if (skippedDir(e.name) || names.has(e.name)) continue;
         if (prefixes.some((p) => `${r}/`.startsWith(p))) continue;
         visit(join(dir, e.name), r);
       } else if (e.isFile()) {

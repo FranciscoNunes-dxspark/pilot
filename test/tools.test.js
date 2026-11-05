@@ -28,8 +28,9 @@ test('changes: changed files to the pages they reach', () => {
   assert.ok(!urls.some((u) => /CartSummary/.test(u)), 'child actions are not pages');
   assert.equal(r.data.files.find((f) => f.file === 'gone.cshtml').kind, null);
   // git's answers turned into project paths, under a project in a subfolder of the repository.
-  const answers = { 'rev-parse --show-prefix': 'web/\n', 'rev-parse --verify HEAD': 'abc\n', 'diff --name-status -M HEAD': 'M\tweb/Views/A.cshtml\nR100\tweb/old.less\tweb/new.less\nM\tother/x.cs\n', 'ls-files --others --exclude-standard --full-name': 'web/Scripts/new.ts\n' };
+  const answers = { 'rev-parse --show-prefix': 'web/\n', 'rev-parse --verify HEAD': 'abc\n', 'diff --name-status -M HEAD': 'M\tweb/Views/A.cshtml\nR100\tweb/old.less\tweb/new.less\nM\tother/x.cs\n', 'ls-files --others --exclude-standard --full-name': 'web/Scripts/new.ts\nweb/.claude/worktrees/feature/\nweb/wt/\nweb/bin/x.cshtml\n' };
   const run = (_, args) => answers[args.slice(2).join(' ')] ?? '';
+  // Worktrees (.claude's and others, which git lists as one folder) and folders Pilot never reads are left out.
   assert.deepEqual(gitChanges('/repo/web', { run }), [{ file: 'Views/A.cshtml', status: 'modified' }, { file: 'new.less', status: 'renamed' }, { file: 'Scripts/new.ts', status: 'untracked' }]);
 });
 

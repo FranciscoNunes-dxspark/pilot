@@ -307,7 +307,10 @@ Every place is printed as `path:line` from the root.
 
 Libraries (`wwwroot/lib`, `*.min.js`, `jquery-*.js`, `bootstrap*`, `.d.ts`…) are indexed so
 references resolve, but not read for selectors unless `--vendor` is given. `bin`, `obj`,
-`node_modules`, `packages` and hidden folders are skipped.
+`node_modules`, `packages` and hidden folders are skipped, `.claude` with Claude Code's worktrees
+among them, and so is a git worktree anywhere else in the project (a folder whose `.git` file points
+into a repository's `worktrees`), which is another checkout, not more of this one; a submodule is
+read. `pilot changes` and the UI's live updates leave the same folders out.
 
 ## Screenshots
 

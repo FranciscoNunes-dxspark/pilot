@@ -29,7 +29,7 @@ import { report } from '../report.js';
 import { installHook } from '../hook.js';
 import { mcpServer, writeMcpJson } from '../cli.js';
 import { SKILL } from '../skill.js';
-import { kindOf } from '../walk.js';
+import { inSkippedDir, isWorktree, kindOf } from '../walk.js';
 import { findChrome } from '../shots.js';
 import { brandWindows } from './brand.js';
 import { describeFolder, forgetProject, listFolders, pickFolder, pickerKind, pinProject, projectFolder, recentProjects, rememberProject, stateDir } from './projects.js';
@@ -381,11 +381,23 @@ export function createSession({ root = null, vendor = false, ignore = [], fresh 
   };
   const watchProject = (dir) => {
     let pending = new Set();
+    // The folders of a changed file's path that are worktrees, found once each.
+    const worktrees = new Map();
+    const inWorktree = (rel) => {
+      const parts = rel.split('/').slice(0, -1);
+      return parts.some((_, i) => {
+        const sub = parts.slice(0, i + 1).join('/');
+        if (!worktrees.has(sub)) worktrees.set(sub, isWorktree(join(dir, sub)));
+        return worktrees.get(sub);
+      });
+    };
     let timer = null;
     try {
       watcher = watch(dir, { recursive: true }, (_, name) => {
         const rel = String(name ?? '').replace(/\\/g, '/');
-        if (!rel || /(^|\/)(\.pilot|\.git|\.vs|node_modules|bin|obj)(\/|$)/.test(rel) || !kindOf(rel.split('/').pop())) return;
+        // Only the files the index reads: not in .claude (Claude Code's worktrees), .git, bin, … nor in a
+        // worktree elsewhere in the project.
+        if (!rel || inSkippedDir(rel) || !kindOf(rel.split('/').pop()) || inWorktree(rel)) return;
         pending.add(rel);
         clearTimeout(timer);
         timer = setTimeout(() => {

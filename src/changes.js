@@ -1,6 +1,7 @@
 // `pilot changes`: what git says changed, and the pages each change reaches, so whoever reviews or
 // tests a UI change knows which screens to open. Changed views, partials, layouts, scripts and
 // stylesheets reach pages through the graph (dependents); a changed controller reaches its actions.
+import { inSkippedDir } from './walk.js';
 import { execFileSync } from 'node:child_process';
 import { actionLabel, urlOf } from './queries.js';
 
@@ -24,6 +25,9 @@ export function gitChanges(root, { base = null, run = execFileSync } = {}) {
   const add = (path, status) => {
     if (!path.startsWith(prefix)) return;
     const rel = path.slice(prefix.length);
+    // Not the project's: a folder git lists as one entry (a worktree or another repository inside it,
+    // like .claude/worktrees/<name>/), and anything in the folders Pilot never reads.
+    if (rel.endsWith('/') || inSkippedDir(rel)) return;
     if (rel && !out.has(rel)) out.set(rel, status);
   };
   const nameStatus = (text) => {

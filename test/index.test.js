@@ -3,7 +3,8 @@
 // attribute routes, tag helpers, a view component, tsconfig outDir, bundleconfig.json), as one graph.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { inSkippedDir, isWorktree, walk } from '../src/walk.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -152,5 +153,33 @@ test('the cache: unchanged files come from it, a changed one is read again', () 
     else process.env.PILOT_CACHE = saved;
     rmSync(dir, { recursive: true, force: true });
     rmSync(cache, { recursive: true, force: true });
+  }
+});
+
+test('worktrees are left out: .claude\'s and any other in the project, but not a submodule', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pilot-wt-'));
+  try {
+    const put = (rel, text = '<div class="a"></div>\n') => {
+      mkdirSync(join(dir, rel, '..'), { recursive: true });
+      writeFileSync(join(dir, rel), text);
+    };
+    put('Views/Home/Index.cshtml');
+    // Claude Code's worktrees, in a dot folder.
+    put('.claude/worktrees/feature/Views/Home/Index.cshtml');
+    put('.claude/worktrees/feature/.git', `gitdir: ${dir}/.git/worktrees/feature\n`);
+    // A worktree elsewhere (git worktree add ../x puts it anywhere): its .git file points into worktrees.
+    put('checkouts/fix/Views/Home/Index.cshtml');
+    put('checkouts/fix/.git', 'gitdir: C:\\src\\shop\\.git\\worktrees\\fix\n');
+    // A submodule: its .git file points into .git/modules, and its views are the project's.
+    put('Lib/Views/Shared/_Lib.cshtml');
+    put('Lib/.git', 'gitdir: ../.git/modules/Lib\n');
+    assert.equal(isWorktree(join(dir, 'checkouts/fix')), true);
+    assert.equal(isWorktree(join(dir, 'Lib')), false);
+    assert.deepEqual(walk(dir).map((f) => f.rel).sort(), ['Lib/Views/Shared/_Lib.cshtml', 'Views/Home/Index.cshtml']);
+    assert.equal(inSkippedDir('.claude/worktrees/feature/Views/x.cshtml'), true);
+    assert.equal(inSkippedDir('Views/.well-known/x.cshtml'), false);
+    assert.equal(inSkippedDir('Views/Home/x.cshtml'), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
