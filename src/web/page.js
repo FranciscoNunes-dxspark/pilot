@@ -2,6 +2,23 @@
 // its function's source so the page needs no bundler and the executable carries it. Colours are
 // tokens with a dark set; nothing is loaded from the network.
 import { client } from './client.js';
+import { logoPng, logoSvg } from '../logo.js';
+
+// The logo as the page's icons, drawn once: Edge and Chrome take the window's and its taskbar
+// button's icon from these (the 32 px one pixel for pixel, the 256 px one for large icons), browsers
+// that read SVG icons the SVG; and the wheel alone, for the menu bar and the start page.
+let icons = null;
+function pageIcons() {
+  icons ??= {
+    links: [
+      `<link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,${logoPng(32).toString('base64')}">`,
+      `<link rel="icon" type="image/png" sizes="256x256" href="data:image/png;base64,${logoPng(256).toString('base64')}">`,
+      `<link rel="icon" type="image/svg+xml" sizes="any" href="data:image/svg+xml,${encodeURIComponent(logoSvg({ dark: true }))}">`,
+    ].join('\n'),
+    wheel: `data:image/svg+xml,${encodeURIComponent(logoSvg())}`,
+  };
+  return icons;
+}
 
 const CSS = `
 :root {
@@ -36,7 +53,7 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 header.top { display: block; padding: 0; }
 .menubar { display: flex; align-items: center; gap: 6px; padding: 4px 10px; }
-.menubar .logo { font-size: 18px; color: #c08030; padding: 0 4px; }
+.menubar .logo { width: 20px; height: 20px; margin: 0 4px; image-rendering: pixelated; }
 .menubar .search input { width: min(420px, 34vw); padding: 4px 9px; }
 .menubar .project { max-width: 28vw; overflow: hidden; }
 .menubar .project .pill { font-size: 12.5px; padding: 2px 10px; color: var(--text); }
@@ -155,7 +172,7 @@ button.ghost:hover { border-color: var(--line); color: var(--text); }
 main.start { max-width: 1180px; padding-top: 5vh; }
 .start-title { display: flex; align-items: center; gap: 16px; margin-bottom: 26px; }
 .start-title h1 { font-size: 30px; margin: 0; font-weight: 600; }
-.big-logo { font-size: 46px; color: #c08030; }
+.big-logo { width: 56px; height: 56px; image-rendering: pixelated; }
 .start-cols { display: grid; grid-template-columns: 1.35fr 1fr; gap: 40px; }
 .start-cols h2 { font-size: 17px; font-weight: 600; margin: 0 0 12px; }
 .recent { margin-top: 8px; max-height: 60vh; overflow: auto; }
@@ -177,7 +194,8 @@ button.big small { color: var(--dim); font-size: 12.5px; }
 `;
 
 export function pageHtml({ root = null, name = null, version, app = false, picker = false }) {
-  const boot = JSON.stringify({ root, name, version, app, picker }).replace(/</g, '\\u003c');
+  const { links, wheel } = pageIcons();
+  const boot = JSON.stringify({ root, name, version, app, picker, logo: wheel }).replace(/</g, '\\u003c');
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -185,7 +203,7 @@ export function pageHtml({ root = null, name = null, version, app = false, picke
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#14202c">
 <title>${name ? `${escape(name)} - Pilot` : 'Pilot'}</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2314202c'/%3E%3Ccircle cx='8' cy='8' r='4.5' fill='none' stroke='%23e0b060' stroke-width='1.6'/%3E%3Cpath d='M8 1v14M1 8h14' stroke='%23c08030' stroke-width='1.4'/%3E%3Ccircle cx='8' cy='8' r='1.4' fill='%237fd4ff'/%3E%3C/svg%3E">
+${links}
 <style>${CSS}</style>
 </head>
 <body>

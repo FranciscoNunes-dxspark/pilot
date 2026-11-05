@@ -122,7 +122,7 @@ export function client(BOOT) {
   const projectEl = h('div', { class: 'project' });
   const head = h('header', { class: 'top' },
     h('div', { class: 'menubar' },
-      h('span', { class: 'logo', title: `Pilot ${BOOT.version}` }, '☸'), menusEl, h('div', { class: 'grow' }),
+      h('img', { class: 'logo', src: BOOT.logo, alt: 'Pilot', title: `Pilot ${BOOT.version}` }), menusEl, h('div', { class: 'grow' }),
       h('div', { class: 'search' }, searchBox, results), h('div', { class: 'grow' }), projectEl),
     navEl);
   // The header's height, for what sits under it (sticky table heads, the drawer, the graph).
@@ -391,7 +391,7 @@ export function client(BOOT) {
     const pathInput = h('input', { type: 'text', class: 'mono', placeholder: 'C:\\src\\Shop or C:\\src\\Shop\\Shop.sln', style: { flex: '1' } });
     pathInput.addEventListener('keydown', (ev) => ev.key === 'Enter' && openProject(pathInput.value.trim()));
     put(mainEl, h('div', { class: 'start-page' },
-      h('div', { class: 'start-title' }, h('span', { class: 'logo big-logo' }, '☸'), h('div', {}, h('h1', {}, 'Pilot'), h('div', { class: 'dim' }, `An ASP.NET MVC project's pages, views, scripts and styles as one map · ${BOOT.version}`))),
+      h('div', { class: 'start-title' }, h('img', { class: 'big-logo', src: BOOT.logo, alt: '' }), h('div', {}, h('h1', {}, 'Pilot'), h('div', { class: 'dim' }, `An ASP.NET MVC project's pages, views, scripts and styles as one map · ${BOOT.version}`))),
       h('div', { class: 'start-cols' },
         h('section', {}, h('h2', {}, 'Open recent'), filter, listEl),
         h('section', {}, h('h2', {}, 'Get started'),

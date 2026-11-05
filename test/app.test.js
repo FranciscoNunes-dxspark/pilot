@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { appWindowArgs, createSession, findAppBrowser, handler, lifecycle } from '../src/web/server.js';
 import { describeFolder, forgetProject, listFolders, pickFolder, pickerKind, pinProject, projectFolder, recentProjects, rememberProject } from '../src/web/projects.js';
 import { pageHtml } from '../src/web/page.js';
+import { decodePng } from '../src/png.js';
+import { WHEEL, logoPng, logoSvg } from '../src/logo.js';
 
 const SHOP = fileURLToPath(new URL('./fixtures/shop', import.meta.url));
 
@@ -240,4 +242,18 @@ test('the installer opens Pilot\'s window: the Start menu, folders and solutions
   assert.match(iss, /Directory\\shell\\Pilot\\command"; ValueType: string; ValueData: """\{app\}\\pilot\.exe"" app --root ""%V\\\."""/);
   assert.match(iss, /SystemFileAssociations\\\.sln\\shell\\Pilot\\command"; ValueType: string; ValueData: """\{app\}\\pilot\.exe"" app --root ""%1"""/);
   assert.ok(!/ProjectFolder|Parameters: "ui"/.test(iss), 'no project asked for at install time');
+});
+
+test('one logo everywhere: the assets, the window\'s icons and the menu bar are the same drawing', () => {
+  // assets/logo.png is what scripts/logo.js draws from src/logo.js, so the two can't drift apart.
+  assert.deepEqual(logoPng(256), readFileSync(fileURLToPath(new URL('../assets/logo.png', import.meta.url))));
+  assert.deepEqual(decodePng(logoPng(32)).width, 32);
+  const cells = WHEEL.join('').replace(/\./g, '').length;
+  assert.equal((logoSvg().match(/<rect /g) ?? []).length, cells);
+  assert.equal((logoSvg({ dark: true }).match(/<rect /g) ?? []).length, cells + 1, 'and the dark square');
+  const html = pageHtml({ version: '1' });
+  assert.match(html, /<link rel="icon" type="image\/png" sizes="32x32" href="data:image\/png;base64,/);
+  assert.match(html, /<link rel="icon" type="image\/png" sizes="256x256" href="data:image\/png;base64,/);
+  assert.match(html, /<link rel="icon" type="image\/svg\+xml" sizes="any" href="data:image\/svg\+xml,/);
+  assert.match(html, /"logo":"data:image\/svg\+xml,/);
 });
