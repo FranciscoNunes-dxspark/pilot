@@ -370,3 +370,19 @@ test('LESS: top-level blocks with their ranges, and section headings', () => {
   assert.deepEqual(l.blocks[2].classes, [0, 2]);
   assert.deepEqual(l.headers, [{ line: 1, title: 'Variables' }, { line: 5, title: 'Orders page' }, { line: 11, title: 'Buttons' }]);
 });
+
+test('scripts: a string that made the selector check backtrack for minutes is read at once', () => {
+  // The old selector pattern (nested optional repeats) tried every way of splitting text like this,
+  // as in Vite's bundled code: '#a w w w…(' took 14 s at 28 words, doubling with each more (it would
+  // fail this test rather than hang it), and calls like these never finished.
+  const line = `"configResolved").map((hook) => hook.call(resolvedConfigContext, workerResolved, workerNormalPlugins, workerPostPlugins, bundleChain, mainConfig, resolved, isWorker, true));\n`;
+  const text = `const s = '#a${' w'.repeat(28)}(';\nawait Promise.all(createPluginHookUtils(x.plugins).getSortedPluginHooks(${line.repeat(20)}`;
+  const started = Date.now();
+  const r = parseScript(text);
+  assert.ok(Date.now() - started < 1000, `${Date.now() - started} ms`);
+  // Selectors are still found as before.
+  const s = parseScript(`$('.grid tr:hover > td.cell'); $('#orders .row, .x + .y'); $('.a  li  span[data-x]');`);
+  assert.deepEqual(s.classes.map(([c]) => c).sort(), ['a', 'cell', 'grid', 'row', 'x', 'y']);
+  assert.deepEqual(s.ids.map(([i]) => i), ['orders']);
+  assert.ok(Array.isArray(r.classes));
+});

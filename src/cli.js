@@ -144,7 +144,9 @@ export async function run(argv, { write = (s) => process.stdout.write(s), error 
     const { buildIndex } = await import('./index.js');
     const say = (p) => write(`${JSON.stringify(p)}\n`);
     try {
-      const idx = buildIndex(opts.root, { vendor: opts.vendor, ignore: opts.ignore, link: false, progress: (_, p) => say(p) });
+      // Each file's name as it's read, too: while a slow one is read nothing else comes, so the UI
+      // knows which it is.
+      const idx = buildIndex(opts.root, { vendor: opts.vendor, ignore: opts.ignore, link: false, progress: (_, p) => say(p), reading: (file, size) => say({ file, size }) });
       say({ phase: 'parsed', ...idx.stats });
       return 0;
     } catch (e) {

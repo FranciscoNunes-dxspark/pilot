@@ -108,7 +108,7 @@ export class ProjectIndex {
    * done out of total, then 'link'. `link: false` stops after the parse (and the cache's write):
    * `pilot index` does the parsing in a process of its own for the UI, which then links from the cache.
    */
-  build({ cache = true, ignore = [], progress = () => {}, link = true } = {}) {
+  build({ cache = true, ignore = [], progress = () => {}, link = true, reading = null } = {}) {
     const started = Date.now();
     progress('listing files', { phase: 'list', done: 0, total: 0 });
     const listed = walk(this.root, { ignore });
@@ -134,6 +134,8 @@ export class ProjectIndex {
         cached++;
         return;
       }
+      // Who wants to know which file is being read (pilot index, so the UI can name a slow one).
+      reading?.(f.rel, f.size);
       const vendor = isVendor(f.rel);
       let data = null;
       let error = null;

@@ -375,7 +375,9 @@ in a browser profile of Pilot's own. It opens the way Visual Studio does:
 last step that connects the views, scripts and styles. The first time, Pilot reads every file; after
 that it keeps them in its cache and reads only the ones that changed, so the same project opens in
 seconds. The reading runs apart from the window, which stays usable meanwhile; closing the box leaves
-the progress as a note at the bottom.
+the progress as a note at the bottom. A file that takes more than a few seconds is named in the box
+("Still reading Scripts/dist/app.bundle.js…"): leave its folder out with `--ignore` if it's
+generated, and please report it, as no file should take that long.
 
 On Windows the window is Pilot's on the taskbar, not the browser's: its own icon, its own group,
 and pinning it pins Pilot (`pilot app`), so the pinned button opens the start page.

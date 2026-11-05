@@ -500,6 +500,11 @@ export function createSession({ root = null, vendor = false, ignore = [], fresh 
         } catch {
           return;
         }
+        if (p.file) {
+          // The file being read now, and since when: the window names it once it's slow.
+          opening = { ...opening, file: p.file, size: p.size, fileSince: Date.now() };
+          return;
+        }
         if (!['list', 'parse'].includes(p.phase)) return;
         const changed = p.phase !== opening?.phase;
         opening = { ...opening, phase: p.phase, done: p.done, total: p.total };
@@ -509,6 +514,9 @@ export function createSession({ root = null, vendor = false, ignore = [], fresh 
         }
       });
       child.stderr.on('data', (d) => (errors += d));
+      // Nothing comes while one file takes long, so say how things stand every couple of seconds.
+      const beat = setInterval(() => opening?.phase === 'parse' && announce({ opening }), 2000);
+      child.on('close', () => clearInterval(beat));
       child.on('error', () => {
         // Couldn't start it after all: open here, holding the server up as before.
         opening = null;

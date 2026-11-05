@@ -22,8 +22,13 @@ export function selectorTokens(sel) {
   return { classes, ids, attrs };
 }
 
+// A selector: a compound with a class or id first (`.btn`, `li#x`, `a.b:hover[data-x]`), then more
+// compounds after a combinator. Written so each character can match one way only: nested optional
+// repeats here backtracked exponentially on some long strings in bundled code (minutes for one file).
+const SIMPLE = String.raw`(?:[.#:][A-Za-z_-][\w-]*|\[[^\]]*\])`;
+const SELECTOR = new RegExp(String.raw`^\s*(?:[a-z][\w-]*)?[.#][A-Za-z_-][\w-]*${SIMPLE}*(?:(?:\s*[>+~,]\s*|\s+)(?:[a-z][\w-]*${SIMPLE}*|${SIMPLE}+))*\s*$`);
 /** Whether a string literal reads as nothing but a CSS selector ('.row', '#form .save', 'tr.selected > td'). */
-const looksLikeSelector = (s) => /^\s*(?:[a-z][\w-]*)?[.#][A-Za-z_-][\w-]*(?:[\s>+~,]*(?:[a-z][\w-]*)?(?:[.#:][A-Za-z_-][\w-]*|\[[^\]]+\])*)*\s*$/.test(s) && !NOT_CLASSES.test(s.trim());
+const looksLikeSelector = (s) => s.length <= 300 && SELECTOR.test(s) && !NOT_CLASSES.test(s.trim());
 
 /** Whether a string literal reads as a server route rather than a file: '/Orders/Save', '~/api/items'. */
 const looksLikeRoute = (s) => /^~?\/[A-Za-z][\w-]*(?:\/[\w{}:-]*)*\/?(?:\?.*)?$/.test(s) && !/\.\w{1,5}(\?|$)/.test(s);

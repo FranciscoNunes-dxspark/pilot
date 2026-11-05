@@ -337,6 +337,10 @@ export function client(BOOT) {
       h('div', { class: 'bar', style: { margin: '12px 0 8px', height: '10px' } },
         h('i', { class: o.phase === 'parse' ? '' : 'busy', style: { width: o.phase === 'parse' ? `${pct}%` : '100%', background: 'var(--accent)' } })),
       h('div', { class: 'faint mono', style: { overflowWrap: 'anywhere' } }, o.path),
+      // One file taking long: which, so it can be left out (--ignore) or reported.
+      o.phase === 'parse' && o.file && o.fileSince && Date.now() - o.fileSince > 4000
+        ? h('div', { class: 'warn', style: { marginTop: '8px', overflowWrap: 'anywhere' } }, `Still reading ${o.file} (${Math.round((o.size ?? 0) / 1024).toLocaleString()} KB) after ${Math.round((Date.now() - o.fileSince) / 1000)} s.`)
+        : null,
       h('div', { class: 'faint', style: { marginTop: '8px' } }, `${secs < 2 ? '' : `${secs < 60 ? `${secs} s` : `${Math.floor(secs / 60)} min ${secs % 60} s`} so far. `}The first time Pilot reads every file; after that, only the ones that changed.`));
     if (openingBox && layer.contains(openingBox.box)) return put(openingBox.box.querySelector('.dialog-body'), body);
     openingBox = dialog(`Opening ${o.name}`, body);
